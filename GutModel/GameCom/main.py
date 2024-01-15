@@ -8,6 +8,10 @@ import warnings
 warnings.filterwarnings("ignore")
 warnings.simplefilter('ignore')
 
+# Set solver to use with cvxpy. See "Choosing a solver" section here for using alternatives 
+# to Gurobi: https://www.cvxpy.org/tutorial/advanced/index.html
+cp_solver = 'GUROBI'
+
 # Functions provided here are generalizations of the 
 # functions defined in the two notebooks "ecoli_model_compute_ss_gne.ipynb"
 # and "ecoli_model_stability.ipynb" found in the folder
@@ -27,7 +31,7 @@ def initial_guess(target_bm, species_params, S, Jl, lumen_reactions_idx,
     constraints.append(ex_constraint >= reaction_lb[lumen_reactions_idx.flatten()])
     constraints.append(ex_constraint <= reaction_ub[lumen_reactions_idx.flatten()])
     prob = cp.Problem(cp.Maximize(0), constraints)
-    prob.solve(solver=cp.GUROBI)
+    prob.solve(solver=cp_solver)
     return [prob.status] + [solutions[i].value for i in range(len(species_params))]
 
 def compute_steady_state(target_bm, x_values, max_iters, tol_bm, tol_flux,
@@ -66,7 +70,7 @@ def compute_steady_state(target_bm, x_values, max_iters, tol_bm, tol_flux,
             num_tries = 0
             while prob.status is None and num_tries < 2:
                 try:
-                    prob.solve(solver=cp.GUROBI)
+                    prob.solve(solver=cp_solver)
                     num_tries = num_tries + 1
                 except:
                     num_tries = num_tries + 1
