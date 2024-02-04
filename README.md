@@ -6,6 +6,7 @@ section here for more details: https://www.cvxpy.org/tutorial/advanced/index.htm
 Organization of the project as follows:
 
 - EColiModel/
+  - yada
 - GutModel/
 
 # EColiModel/
