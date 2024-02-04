@@ -6,6 +6,7 @@ section here for more details: https://www.cvxpy.org/tutorial/advanced/index.htm
 Organization of the project as follows:
 
 - EColiModel/
+  
   Models, code, and output files for reproducing results in Section 4.1 for the community of four auxotrophic *E. coli.* strains.
   - GameCom/
     Has final data for creating Figure 2 in the main text and Figure 1 in the *SI*, as well as the following Jupyter notebooks for creating this data:
