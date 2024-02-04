@@ -1,11 +1,12 @@
 Code for implementing GameCom and reproducing results from associated paper. All scripts/notebooks that 
-require solving an optimization problem have a parameter 
-"cp_solver" at the beginning to specify which solver 
-to use with cvxpy. We use Gurobi, but other 
-options are available. See the "Choosing a solver" 
+require solving an optimization problem have a parameter "cp_solver" at the beginning to specify which solver 
+to use with cvxpy. We use Gurobi, but other options are available. See the "Choosing a solver" 
 section here for more details: https://www.cvxpy.org/tutorial/advanced/index.html.
 
 Organization of the project as follows:
+
+- EColiModel/
+- GutModel/
 
 # EColiModel/
 
