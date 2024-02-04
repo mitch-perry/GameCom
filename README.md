@@ -45,7 +45,7 @@ Organization of the project as follows:
 
 - GutModel/
 
-  Models, code, and output files for reproducing results in Section 4.2 for the Gut microbiome model.
+  Models, code, and output files for reproducing results in Section 4.2 in the main text and Section S.4.2 in the *SI* for the Gut microbiome model.
   - GameCom/
 
     Has final data for creating Figure 3 in the main text, as well as the following Jupyter notebooks for creating this data:
