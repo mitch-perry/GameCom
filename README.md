@@ -7,38 +7,50 @@ Organization of the project as follows:
 
 - EColiModel/
   
-  Models, code, and output files for reproducing results in Section 4.1 for the community of four auxotrophic *E. coli.* strains.
+  Models, code, and output files for reproducing results in Section 4.1 of the main text and Section S.4.1 in the *SI* for the community of four auxotrophic *E. coli.* strains.
   - GameCom/
 
-    Has final data for creating Figure 2 and Table 1 in the main text, and Figures 1 -- 4 in the *SI*, as well as the following Jupyter notebooks for creating this data:
+    Has final data for creating Figure 2 and Table 1 in the main text, and Figures 1 -- 4 in the *SI*, as well as the following Jupyter notebooks for creating this data. 
+    This is the main folder to focus on for running and analyzing GameCom for the four *E. coli* community.
+
     - ecoli_model_compute_ss_gne.ipynb
 
-      Computes steady state GNE.
+      Computes steady state GNE. If you're just interested in recreating the results in the paper from already computed steady states, skip this notebook.
+
     - ecoli_model_stability.ipynb
 
-      Reads in steady state GNE produced by previous notebook, and determines stability to biomass changes and stability to invasion by fifth *E. coli.* strain.
+      Reads in steady state GNE produced by previous notebook, and determines stability to biomass changes and stability to invasion by fifth *E. coli.* strain. 
+      If you're just interested in recreating the results in the paper from already computed stable and unstable steady states, skip this notebook.
+
     - ecoli_model_bm_stability_analysis.ipynb
 
-      Analyze metabolism of steady state GNE that are stable and unstable to biomass perturbations. Create Figure 2 (a) in main text and Figure 1 (a) in *SI*, as well as Table 1 in main text.
-      Also do FVA analysis and create Figures 2 --4 in the *SI*.
+      Analyze metabolism of steady state GNE that are stable and unstable to biomass perturbations. Create Figure 2 (a) in main text and Figure 1 (a) in *SI*, as well as Table 1 in main text. Also do FVA analysis and create Figures 2 --4 in the *SI*.
+
     - ecoli_model_invasion_stability_analysis.ipynb
 
       Analyze metabolism of steady state GNE that are invaded and uninvaded by fifth *E. coli.* strain. Create Figure 2 (b) in main text and Figure 1 (b) in *SI*.
+
   - ModelFiles/
 
     .mat files specifying community metabolism. Taken from SteadyCom code.
+
     - FourSpecies/
     - FiveSpecies/
+  
   - NECom/
 
     Implementation of NECom for comparison to GameCom.
+
     - NECom_Ecoli.ipynb
+  
   - SteadyCom/
 
     .mat files for using SteadyCom code available from https://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1005539#sec014 to run SteadyCom for comparison and to make .mat files to feed into GameCom.
+  
     - makeEcoliModel.m
 
       Create .mat files specifying the community model.
+
     - steadyComFourSpeciesEcoli.m
 
       Apply SteadyCom to four *E. coli.* strain community.
@@ -46,25 +58,35 @@ Organization of the project as follows:
 - GutModel/
 
   Models, code, and output files for reproducing results in Section 4.2 in the main text and Section S.4.2 in the *SI* for the Gut microbiome model.
+
   - GameCom/
 
-    Has final data for creating Figure 3 in the main text, as well as the following Jupyter notebooks for creating this data:
+    Has final data for creating Figure 3 in the main text, as well as the following Jupyter notebooks for creating this data.
+    This is the main folder to focus on for running and analyzing GameCom for the nine species gut microbiome community.
+
     - main.py
 
       Concise/general implementation of GameCom model (compared to implementation in the EColiModel folder that's specific/hardcoded for the *E. coli.* model.)
+
     - nine_species_compute_ss_gne.ipynb
 
-      Application of GameCom to gut microbiome model. Computes steady state GNE and their stability to biomass perturbations.
+      Application of GameCom to gut microbiome model. Computes steady state GNE and their stability to biomass perturbations. Already-computed steady states 
+      used for the figures in the paper are included and can be loaded to just remake figures.
+
   - ModelFiles/
 
     .mat files specifying gut microbiome model.
+
   - SteadyCom/
+  
     - makeNineSpeciesForPython.m
 
       Create .mat files specifying the community model.
+
     - simNineSpecies
 
       Apply SteadyCom to the gut microbiome community.
+
     - SteadyComSubroutines.m
 
       Utility functions for the other two files.

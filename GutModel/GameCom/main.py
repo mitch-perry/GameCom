@@ -9,7 +9,10 @@ warnings.filterwarnings("ignore")
 warnings.simplefilter('ignore')
 
 # Set solver to use with cvxpy. See "Choosing a solver" section here for using alternatives 
-# to Gurobi: https://www.cvxpy.org/tutorial/advanced/index.html
+# to Gurobi: https://www.cvxpy.org/tutorial/advanced/index.html. To set up an academic 
+# Gurobi license, see here: https://www.gurobi.com/features/academic-named-user-license/.
+# Note that must be used for analyzing stability, as the current implementation uses 
+# Gurobi to extract information on dual variables.
 cp_solver = 'GUROBI'
 
 # Functions provided here are generalizations of the 
@@ -17,9 +20,10 @@ cp_solver = 'GUROBI'
 # and "ecoli_model_stability.ipynb" found in the folder
 # EColiModel/GameCom/.
 
+# Generate initial feasible solution to biomass-weighted game.
 def initial_guess(target_bm, species_params, S, Jl, lumen_reactions_idx, 
                   death_rate, reaction_lb, reaction_ub):
-    solutions = [cp.Variable((species_params[i]['J'] + Jl,1)) for i in range(len(species_params))]
+    solutions = [cp.Variable((species_params[i]['J'] + Jl, 1)) for i in range(len(species_params))]
     constraints = []
     ex_constraint = 0
     for i in range(len(species_params)):
@@ -31,26 +35,122 @@ def initial_guess(target_bm, species_params, S, Jl, lumen_reactions_idx,
     constraints.append(ex_constraint >= reaction_lb[lumen_reactions_idx.flatten()])
     constraints.append(ex_constraint <= reaction_ub[lumen_reactions_idx.flatten()])
     prob = cp.Problem(cp.Maximize(0), constraints)
+    try:
+        prob.solve(solver=cp_solver)
+        return [prob.status] + [solutions[i].value for i in range(len(species_params))]
+    except:
+        return None
+
+
+# Generate initial feasible solution to biomass-weighted game, without considering 
+# constraint on growth rate being larger than death rate.
+def initial_guess_no_death(target_bm, species_params, S, Jl, lumen_reactions_idx, reaction_lb, reaction_ub):
+    solutions = [cp.Variable((species_params[i]['J'] + Jl,1)) for i in range(len(species_params))]
+    constraints = []
+    ex_constraint = 0
+    for i in range(len(species_params)):
+        constraints.append(S[:,np.concatenate([species_params[i]['reactions_idx'], lumen_reactions_idx]).flatten()] @ solutions[i] == 0)
+        constraints.append(reaction_lb[species_params[i]['reactions_idx'].flatten()] <= solutions[i][0:species_params[i]['J']])
+        constraints.append(reaction_ub[species_params[i]['reactions_idx'].flatten()] >= solutions[i][0:species_params[i]['J']])
+        ex_constraint = ex_constraint + target_bm[i] * solutions[i][species_params[i]['J']:]
+    constraints.append(ex_constraint >= reaction_lb[lumen_reactions_idx.flatten()])
+    constraints.append(ex_constraint <= reaction_ub[lumen_reactions_idx.flatten()])
+    prob = cp.Problem(cp.Maximize(0), constraints)
     prob.solve(solver=cp_solver)
     return [prob.status] + [solutions[i].value for i in range(len(species_params))]
 
+
+# Computes Nash equilibrium for game given by equation (8) in the paper.
+def nash_eq(target_bm, x_values, max_iters, tol_flux, br_tol,
+            delta_vals, species_params, S, Jl,
+            lumen_reactions_idx, reaction_lb, reaction_ub):
+    iteration = 0
+
+    # x_vals tracks species' fluxes.
+    x_vals = [np.copy(x_values[i]) for i in range(len(x_values))]
+    max_current_change = 1
+
+    while iteration < max_iters and max_current_change > tol_flux:
+        print('Iteration ', iteration)
+
+        # Delta is size of regularization constant in iterative method for 
+        # computing Nash equilibria.
+        delta = delta_vals[iteration]
+        solution_flux_vals = []
+        for i in range(len(target_bm)):
+            solution = cp.Variable((species_params[i]['J'] + Jl, 1))
+            constraints = []
+            constraints.append(S[:, np.concatenate([species_params[i]['reactions_idx'], lumen_reactions_idx]).flatten()] @ solution == 0)
+            constraints.append(solution[0:species_params[i]['J']] >= reaction_lb[species_params[i]['reactions_idx'].flatten()])
+            constraints.append(solution[0:species_params[i]['J']] <= reaction_ub[species_params[i]['reactions_idx'].flatten()])
+            ex_constraint = 0
+            for j in range(len(target_bm)):
+                if j != i:
+                    ex_constraint = ex_constraint + target_bm[j] * x_vals[j][species_params[j]['J']:]
+                else:
+                    ex_constraint = ex_constraint + target_bm[i] * solution[species_params[i]['J']:]
+            constraints.append(ex_constraint <= reaction_ub[lumen_reactions_idx.flatten()])
+            constraints.append(ex_constraint >= reaction_lb[lumen_reactions_idx.flatten()])
+            objective = species_params[i]['e'].T @ solution - 0.5 * delta * cp.quad_form(solution - x_vals[i], sparse.identity((species_params[i]['J']+Jl)).tocsr())
+            prob = cp.Problem(cp.Maximize(objective), constraints)
+            num_tries = 0
+            # Occassional randomized numerical linear algebra error, solve a second time 
+            # if such an error occurs.
+            while prob.status is None and num_tries < 2:
+                try:
+                    prob.solve(solver=cp_solver)
+                    num_tries = num_tries + 1
+                except:
+                    num_tries = num_tries + 1
+            if solution.value is None:
+                solution.value = np.zeros((species_params[i]['J']+Jl,1))
+            if prob.status != 'optimal':
+                solution.value = np.zeros((species_params[i]['J']+Jl,1))
+            if abs(species_params[i]['e'].T.dot(solution.value) - species_params[i]['e'].T.dot(x_vals[i])) / (species_params[i]['e'].T.dot(x_vals[i]) + 1e-8) > br_tol:
+                solution_flux_vals.append(solution.value)
+            else:
+                solution_flux_vals.append(x_vals[i])
+        
+        # Update fluxes.
+        x_old_vals = np.copy(x_vals)
+        for i in range(len(target_bm)):
+            x_vals[i] = x_vals[i] + (1 / (2 + np.sqrt(iteration))) * (solution_flux_vals[i] - x_vals[i])
+        
+        max_current_change = 0
+        for i in range(len(target_bm)):
+            if np.linalg.norm(x_old_vals[i]) > 0:
+                change_i = np.linalg.norm(x_vals[i] - x_old_vals[i]) / np.linalg.norm(x_old_vals[i])
+                if change_i > max_current_change:
+                    max_current_change = change_i
+        
+        iteration = iteration + 1
+        print('max_current_change: ', max_current_change)
+    
+    return [iteration, x_vals]
+
+
+# Computes Nash equilibrium for game given by equation (12) in the paper.
 def compute_steady_state(target_bm, x_values, max_iters, tol_bm, tol_flux,
                         delta_vals, species_params, S, Jl, lumen_reactions_idx,
                         reaction_lb, reaction_ub, death_rate):
     iteration = 0
+
+    # bm_vals tracks species' biomasses, x_vals tracks species' biomass-weighted fluxes.
     bm_vals = target_bm
     x_vals = [x_values[i] * bm_vals[i] for i in range(len(bm_vals))] # These are biomass-weighted fluxes.
     max_current_change_bm = 1
     max_current_change = 1
 
-    #while iteration < max_iters and (max_current_change_bm > tol_bm or max_current_change > tol_flux):
     while iteration < max_iters and max_current_change_bm > tol_bm:
         print('Iteration ', iteration)
+
+        # Delta is regularization size for iterative method for computing Nash equlibria.
         delta = delta_vals[iteration]
         solution_flux_vals = []
         solution_bm_vals = []
 
         for i in range(len(target_bm)):
+            # Set up and solve species i's best response problem (12).
             solution = cp.Variable((species_params[i]['J'] + Jl + 1, 1))
             constraints = []
             constraints.append(S[:, np.concatenate([species_params[i]['reactions_idx'], lumen_reactions_idx]).flatten()] @ solution[0:-1] == 0)
@@ -75,10 +175,8 @@ def compute_steady_state(target_bm, x_values, max_iters, tol_bm, tol_flux,
                 except:
                     num_tries = num_tries + 1
             if solution.value is None:
-                #print('solution.value was none')
                 solution.value = np.zeros((species_params[i]['J']+Jl+1,1))
             if prob.status != 'optimal':
-                #print('problem.status was opt-infeasible')
                 solution.value = np.zeros((species_params[i]['J']+Jl+1,1))
             if abs(solution.value[-1] - bm_vals[i]) / np.sum(bm_vals) > tol_bm:
                 solution_bm_vals.append(solution.value[-1])
@@ -112,7 +210,6 @@ def compute_steady_state(target_bm, x_values, max_iters, tol_bm, tol_flux,
         
         iteration = iteration + 1
         print('max_current_change_bm: ', max_current_change_bm)
-        #print('max_current_change: ', max_current_change)
         print('bm_vals: ', bm_vals)
     
     # Convert fluxes back to being non-biomass-weighted.
@@ -126,6 +223,7 @@ def compute_steady_state(target_bm, x_values, max_iters, tol_bm, tol_flux,
     return [iteration, x_vals_new, bm_vals]
 
 
+# Check stability to perturbations in the biomasses.
 def stability(bm_vals, x_vals, pert_size, species_params, S, Jl, 
              reaction_lb, reaction_ub, lumen_reactions_idx, 
              lumen_metabolites_idx, feas_tol):
@@ -141,7 +239,6 @@ def stability(bm_vals, x_vals, pert_size, species_params, S, Jl,
     rxns_ex_vals = []
 
     for i in range(len(bm_vals)):
-        #print('Re-solving problem for species ', i)
         # Species i's problem.
         if bm_vals[i] == 0:
             U_vals.append(np.array([]))
@@ -202,8 +299,6 @@ def stability(bm_vals, x_vals, pert_size, species_params, S, Jl,
             m.params.FeasibilityTol = feas_tol;
             m.update();
             m.optimize();
-
-            #print('m.status: ', m.status)
 
             # Check degeneracy.
             primal_basis_i = rxns_i.VBasis == 0
@@ -338,9 +433,7 @@ def stability(bm_vals, x_vals, pert_size, species_params, S, Jl,
                 A_stable[A_kj_row_idx_start:(A_kj_row_idx_start + len(species_params[k]['metabolites_idx']) + Jl),
                         int((len(species_params)**2 + (len(species_params)**2)*Jl + len(species_params)*np.sum([F_vals[w].shape[0] for w in range(k)]) + j*F_vals[k].shape[0])):int((len(species_params)**2 + (len(species_params)**2)*Jl + len(species_params)*np.sum([F_vals[w].shape[0] for w in range(k)]) + (j+1)*F_vals[k].shape[0]))] = sparse.csr_matrix(block_kj_internal)
     
-    #print('System of equations set up')
     result = sp_linalg.lsqr(A_stable, b_stable, atol=1e-6, btol=1e-6)[0]
-    #print('System of equations solved')
 
     # Row k of h_vals gives values of partials of h_{k}.
     h_vals = np.zeros((len(species_params), len(species_params)))
@@ -358,13 +451,20 @@ def stability(bm_vals, x_vals, pert_size, species_params, S, Jl,
     eigs = linalg.eig(M)[0]
     print('Eigenvalues computed')
 
+    forced_alt = False
+    for k in range(len(species_params)):
+        for k_prime in range(len(species_params)):
+            if (h_vals[k,k_prime] < 0) and (h_vals[k_prime,k] > 0):
+                forced_alt = True
+            
+            if (h_vals[k_prime,k] < 0) and (h_vals[k,k_prime] > 0):
+                forced_alt = True
+
     if np.max(eigs) > 1e-4:
         stable = False
     else:
         stable = True
     
-    return (stable, np.max(eigs))
+    return (stable, np.max(eigs), forced_alt)
     
     
-
-        
